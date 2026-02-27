@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Breakout: FEEDBACK EDITION</title>
+    <style>
+        :root {
+            --bg-color: #020205;
+            --primary: #00f2ff;
+            --secondary: #7000ff;
+            --accent: #ff007b;
+            --disco: #ff00ff;
+            --text: #ffffff;
+        }
+
+        @keyframes bgPulse {
+            0% { background-color: #05050a; }
+            50% { background-color: #25051a; }
+            100% { background-color: #05050a; }
+        }
+
+        .disco-active body {
+            animation: bgPulse 0.5s infinite;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text);
+            font-family: 'Orbitron', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 100px rgba(112, 0, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #000;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            cursor: none;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 25px;
+            left: 25px;
+            right: 25px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .stats-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .stats-item {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 6px 18px;
+            border-radius: 4px;
+            border-left: 4px solid var(--primary);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            backdrop-filter: blur(5px);
+        }
+
+        #xp-bar-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        #xp-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent), var(--primary), var(--secondary));
+            box-shadow: 0 0 20px var(--primary);
+            transition: width 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #message-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(2, 2, 5, 0.95);
+            z-index: 20;
+            text-align: center;
+        }
+
+        .btn {
+            margin-top: 30px;
+            padding: 18px 50px;
+            background: transparent;
+            color: var(--primary);
+            border: 2px solid var(--primary);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            font-weight: bold;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+        }
+
+        .btn:hover {
+            background: var(--primary);
+            color: #000;
+            box-shadow: 0 0 50px var(--primary);
+            transform: translateY(-3px);
+        }
+
+        #ability-bar {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            pointer-events: none;
+        }
+
+        .ability-slot {
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            position: relative;
+            transition: 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        .ability-slot.active {
+            border-color: var(--disco);
+            box-shadow: 0 0 30px var(--disco);
+            transform: translateY(-15px) scale(1.1);
+        }
+
+        .timer-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(255, 0, 255, 0.4);
+            height: 0%;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="xp-bar-container"><div id="xp-bar-fill"></div></div>
+        
+        <div class="ui-overlay">
+            <div class="stats-group">
+                <div class="stats-item">Score <span id="score">0</span></div>
+                <div class="stats-item">Level <span id="lvl">1</span></div>
+            </div>
+            <div class="stats-group" style="align-items: flex-end;">
+                <div class="stats-item">Lives <span id="lives">3</span></div>
+                <div id="unlock-hint" style="color: var(--accent); font-size: 0.7rem; margin-top: 5px;"></div>
+            </div>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="ability-bar">
+            <div id="slot-fire" class="ability-slot">🔥<div class="timer-overlay"></div></div>
+            <div id="slot-laser" class="ability-slot">🔫<div class="timer-overlay"></div></div>
+            <div id="slot-slow" class="ability-slot">⏳<div class="timer-overlay"></div></div>
+            <div id="slot-disco" class="ability-slot">✨<div class="timer-overlay"></div></div>
+        </div>
+
+        <div id="message-screen">
+            <h1 id="title" style="font-size: 5rem; margin: 0; color: var(--primary); text-shadow: 0 0 30px var(--primary);">ULTIMATE</h1>
+            <h2 id="subtitle" style="font-size: 2rem; letter-spacing: 15px; margin: 0; color: var(--accent);">BRICK BREAKER</h2>
+            <div id="final-score" class="hidden" style="font-size: 1.5rem; margin-top: 30px; border-top: 1px solid #333; padding-top: 20px;"></div>
+            <button id="start-btn" class="btn">PLAY</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const livesEl = document.getElementById('lives');
+        const lvlEl = document.getElementById('lvl');
+        const xpFill = document.getElementById('xp-bar-fill');
+        const unlockHint = document.getElementById('unlock-hint');
+        const messageScreen = document.getElementById('message-screen');
+        const startBtn = document.getElementById('start-btn');
+
+        const config = {
+            width: 1000,
+            height: 700,
+            paddleWidth: 120,
+            paddleHeight: 12,
+            ballRadius: 8,
+            brickRows: 8,
+            brickCols: 11,
+            colors: {
+                p: '#00f2ff', 
+                s: '#7000ff', 
+                a: '#ff007b',
+                disco: '#ff00ff',
+                ball: '#ffffff'
+            }
+        };
+
+        canvas.width = config.width;
+        canvas.height = config.height;
+
+        let gameState = 'START';
+        let score = 0;
+        let lives = 3;
+        let level = 1;
+        let xp = 0;
+        let nextLevelXp = 600;
+        let discoHue = 0;
+        let discoTimerOffset = 0;
+        
+        let paddleX = (canvas.width - config.paddleWidth) / 2;
+        let paddleTargetX = paddleX;
+        let paddleHistory = [];
+        
+        let balls = [];
+        let bricks = [];
+        let particles = [];
+        let powerUps = [];
+        let backgroundGeoms = [];
+        let feedBacks = [];
+        let shake = 0;
+        let timeScale = 1;
+
+        // Combo Tracking
+        let comboCount = 0;
+        let lastHitTime = 0;
+
+        let activeAbilities = {
+            fire: 0,
+            laser: 0,
+            slow: 0,
+            mega: 0,
+            disco: 0
+        };
+
+        const MAX_TIMERS = { fire: 500, laser: 400, slow: 350, mega: 600, disco: 3600 };
+
+        // Input
+        let mouseX = canvas.width / 2;
+        canvas.addEventListener('mousemove', e => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = (e.clientX - rect.left) * (config.width / rect.width);
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'd' && gameState === 'PLAYING') {
+                gainAbility('DISCO');
+            }
+        });
+
+        canvas.addEventListener('mousedown', () => {
+            if (gameState === 'PLAYING' && activeAbilities.laser > 0) shootLaser();
+        });
+
+        class Ball {
+            constructor(x, y, dx, dy) {
+                this.x = x; this.y = y;
+                this.dx = dx; this.dy = dy;
+                this.radius = config.ballRadius;
+                this.history = [];
+            }
+
+            update() {
+                let speedMod = timeScale;
+                
+                if (this.x + this.dx > canvas.width - this.radius || this.x + this.dx < this.radius) {
+                    this.dx *= -1;
+                    createParticles(this.x, this.y, activeAbilities.disco > 0 ? `hsl(${discoHue}, 100%, 50%)` : config.colors.p, 10);
+                    if (activeAbilities.disco <= 0) triggerShake(5);
+                }
+                if (this.y + this.dy < this.radius) {
+                    this.dy *= -1;
+                    createParticles(this.x, this.y, activeAbilities.disco > 0 ? `hsl(${discoHue}, 100%, 50%)` : config.colors.p, 10);
+                    if (activeAbilities.disco <= 0) triggerShake(5);
+                }
+
+                const pWidth = activeAbilities.mega > 0 ? config.paddleWidth * 2 : config.paddleWidth;
+                if (this.y + this.dy > canvas.height - 45 - this.radius) {
+                    if (this.x > paddleX && this.x < paddleX + pWidth) {
+                        let hitPos = (this.x - (paddleX + pWidth / 2)) / (pWidth / 2);
+                        let speed = Math.sqrt(this.dx**2 + this.dy**2);
+                        let angle = hitPos * 1.2;
+                        this.dx = speed * Math.sin(angle);
+                        this.dy = -speed * Math.cos(angle);
+                        createParticles(this.x, this.y, config.colors.p, 20);
+                        if (activeAbilities.disco <= 0) triggerShake(10);
+                        // Reset combo on paddle hit
+                        comboCount = 0;
+                    } else if (this.y + this.dy > canvas.height) {
+                        return false;
+                    }
+                }
+
+                this.x += this.dx * speedMod;
+                this.y += this.dy * speedMod;
+
+                this.history.push({x: this.x, y: this.y});
+                if (this.history.length > 15) this.history.shift();
+                
+                return true;
+            }
+
+            draw() {
+                const isFire = activeAbilities.fire > 0;
+                const isDisco = activeAbilities.disco > 0;
+                
+                this.history.forEach((pos, i) => {
+                    ctx.globalAlpha = i / this.history.length * 0.6;
+                    ctx.fillStyle = isDisco ? `hsl(${(discoHue + i*15)%360}, 100%, 50%)` : (isFire ? config.colors.a : config.colors.p);
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, this.radius * (i / this.history.length), 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                
+                ctx.globalAlpha = 1;
+                ctx.shadowBlur = isDisco ? 40 : 15;
+                ctx.shadowColor = isDisco ? `hsl(${discoHue}, 100%, 50%)` : (isFire ? config.colors.a : config.colors.p);
+                
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.clip();
+                
+                ctx.fillStyle = isFire ? config.colors.a : config.colors.ball;
+                ctx.fillRect(this.x - 10, this.y - 10, 20, 20);
+                
+                if(isDisco) {
+                    ctx.fillStyle = `hsl(${(discoHue + 180)%360}, 100%, 50%)`;
+                    for(let i=0; i<3; i++) {
+                        ctx.fillRect(this.x - 10, this.y - 10 + (i*8 + (discoTimerOffset%8)), 20, 3);
+                    }
+                }
+                
+                ctx.restore();
+                
+                ctx.shadowBlur = isDisco ? 40 : 15;
+                ctx.strokeStyle = isDisco ? `hsl(${discoHue}, 100%, 50%)` : '#fff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        class Feedback {
+            constructor(x, y, text, color, isEpic = false) {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.color = color;
+                this.alpha = 1;
+                this.scale = isEpic ? 0.5 : 1;
+                this.isEpic = isEpic;
+                this.dy = -1.5;
+            }
+            update() {
+                this.y += this.dy;
+                this.alpha -= 0.02;
+                if (this.isEpic && this.scale < 1.5) this.scale += 0.05;
+                return this.alpha > 0;
+            }
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.translate(this.x, this.y);
+                ctx.scale(this.scale, this.scale);
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = this.isEpic ? 20 : 5;
+                ctx.shadowColor = this.color;
+                ctx.font = `bold ${this.isEpic ? 24 : 16}px Orbitron`;
+                ctx.textAlign = "center";
+                ctx.fillText(this.text, 0, 0);
+                ctx.restore();
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x; this.y = y;
+                this.color = color;
+                this.dx = (Math.random() - 0.5) * 12;
+                this.dy = (Math.random() - 0.5) * 12;
+                this.alpha = 1;
+                this.size = Math.random() * 5 + 2;
+                this.decay = Math.random() * 0.02 + 0.01;
+            }
+            update() {
+                this.x += this.dx * timeScale;
+                this.y += this.dy * timeScale;
+                this.alpha -= this.decay * timeScale;
+                return this.alpha > 0;
+            }
+            draw() {
+                ctx.globalAlpha = this.alpha;
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        class Drop {
+            constructor(x, y, type) {
+                this.x = x; this.y = y; this.type = type;
+                this.dy = 2.5; this.rot = 0;
+            }
+            update() {
+                this.y += this.dy * timeScale;
+                this.rot += 0.08 * timeScale;
+                const pWidth = activeAbilities.mega > 0 ? config.paddleWidth * 2 : config.paddleWidth;
+                if (this.y > canvas.height - 55 && this.x > paddleX && this.x < paddleX + pWidth) {
+                    gainAbility(this.type);
+                    return false;
+                }
+                return this.y < canvas.height;
+            }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rot);
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = config.colors.p;
+                ctx.fillStyle = "rgba(0, 242, 255, 0.2)";
+                ctx.fillRect(-15, -15, 30, 30);
+                ctx.strokeStyle = config.colors.p;
+                ctx.lineWidth = 3;
+                ctx.strokeRect(-15, -15, 30, 30);
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 14px Orbitron";
+                ctx.textAlign = "center";
+                ctx.fillText(this.type[0], 0, 6);
+                ctx.restore();
+            }
+        }
+
+        function initBricks() {
+            bricks = [];
+            const bw = (canvas.width - 120) / config.brickCols;
+            const bh = 26;
+            for (let r = 0; r < config.brickRows; r++) {
+                bricks[r] = [];
+                for (let c = 0; c < config.brickCols; c++) {
+                    bricks[r][c] = {
+                        x: c * (bw + 6) + 60,
+                        y: r * (bh + 6) + 100,
+                        status: 1,
+                        hp: (r < 2) ? 3 : (r < 4 ? 2 : 1),
+                        color: `hsl(${r * 30 + 180}, 80%, 60%)`
+                    };
+                }
+            }
+        }
+
+        function initBackground() {
+            backgroundGeoms = [];
+            for(let i=0; i<30; i++) {
+                backgroundGeoms.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    s: Math.random() * 80 + 20,
+                    r: Math.random() * Math.PI,
+                    v: Math.random() * 0.02 + 0.01,
+                    type: Math.random() > 0.5 ? 'square' : 'circle'
+                });
+            }
+        }
+
+        function createParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) particles.push(new Particle(x, y, color));
+        }
+
+        function triggerShake(amt) { shake = Math.max(shake, amt); }
+
+        function gainAbility(type) {
+            score += 150;
+            addXp(60);
+            const key = type.toLowerCase();
+            activeAbilities[key] = MAX_TIMERS[key] || 400;
+            if (type === 'MULTI') {
+                const b = balls[0] || {x: canvas.width/2, y: canvas.height/2, dx: 5, dy: -5};
+                balls.push(new Ball(b.x, b.y, -b.dx, b.dy));
+                balls.push(new Ball(b.x, b.y, b.dx*0.6, -b.dy));
+            }
+            if (activeAbilities.disco <= 0) triggerShake(15);
+            feedBacks.push(new Feedback(paddleX + 60, canvas.height - 80, type + "!!", config.colors.p, true));
+        }
+
+        function addXp(amt) {
+            xp += amt;
+            if (xp >= nextLevelXp) {
+                level++;
+                xp -= nextLevelXp;
+                nextLevelXp = Math.floor(nextLevelXp * 1.4);
+                if (activeAbilities.disco <= 0) triggerShake(30);
+                createParticles(canvas.width/2, canvas.height/2, config.colors.disco, 100);
+                feedBacks.push(new Feedback(canvas.width/2, canvas.height/2, "LEVEL UP!!", config.colors.disco, true));
+            }
+            xpFill.style.width = (xp / nextLevelXp * 100) + '%';
+            lvlEl.innerText = level;
+        }
+
+        function hitBrick(r, c) {
+            const b = bricks[r][c];
+            b.hp--;
+            addXp(25);
+            
+            const now = Date.now();
+            if (now - lastHitTime < 500) {
+                comboCount++;
+            } else {
+                comboCount = 1;
+            }
+            lastHitTime = now;
+
+            if (activeAbilities.disco <= 0) triggerShake(8); 
+            
+            // Generate Feedback
+            let bonusText = "";
+            let color = b.color;
+            let isEpic = false;
+
+            if (comboCount > 10 || activeAbilities.disco > 0) {
+                const lines = ["WELL DONE!", "INSANE!", "UNBELIEVABLE!", "GREAT!"];
+                bonusText = lines[Math.floor(Math.random() * lines.length)];
+                color = `hsl(${discoHue}, 100%, 50%)`;
+                isEpic = true;
+            } else if (comboCount > 5) {
+                bonusText = "NICE!";
+                color = config.colors.p;
+            } else {
+                bonusText = "+" + (100 * comboCount);
+            }
+
+            feedBacks.push(new Feedback(b.x + 40, b.y, bonusText, color, isEpic));
+
+            if (b.hp <= 0) {
+                b.status = 0;
+                score += 100 * comboCount;
+                createParticles(b.x + 40, b.y + 13, b.color, 15);
+                
+                const rand = Math.random();
+                if (rand < 0.2) {
+                    const types = ['MULTI', 'FIRE', 'LASER', 'SLOW', 'MEGA', 'DISCO'];
+                    let type;
+                    if (rand < 0.05) type = 'DISCO';
+                    else type = types[Math.floor(Math.random() * 6)];
+                    powerUps.push(new Drop(b.x + 40, b.y, type));
+                }
+            } else {
+                createParticles(b.x + 40, b.y + 13, "#fff", 6);
+            }
+        }
+
+        function shootLaser() {
+            const pWidth = activeAbilities.mega > 0 ? config.paddleWidth * 2 : config.paddleWidth;
+            const beams = [paddleX + 15, paddleX + pWidth - 15];
+            beams.forEach(lx => {
+                createParticles(lx, canvas.height - 50, config.colors.a, 8);
+                bricks.forEach((row, r) => row.forEach((b, c) => {
+                    if (b.status && lx > b.x && lx < b.x + 85) hitBrick(r, c);
+                }));
+            });
+            if (activeAbilities.disco <= 0) triggerShake(12);
+        }
+
+        function update() {
+            if (gameState !== 'PLAYING') return;
+
+            discoHue = (discoHue + 2) % 360;
+            discoTimerOffset = (discoTimerOffset + 1) % 1000;
+            timeScale = activeAbilities.slow > 0 ? 0.35 : 1;
+
+            if (activeAbilities.disco > 0) {
+                document.body.classList.add('disco-active');
+            } else {
+                document.body.classList.remove('disco-active');
+            }
+
+            const pWidth = activeAbilities.mega > 0 ? config.paddleWidth * 2 : config.paddleWidth;
+            paddleTargetX = mouseX - pWidth / 2;
+            paddleX += (paddleTargetX - paddleX) * 0.25;
+            paddleX = Math.max(0, Math.min(canvas.width - pWidth, paddleX));
+
+            paddleHistory.push({x: paddleX, w: pWidth});
+            if (paddleHistory.length > 10) paddleHistory.shift();
+
+            backgroundGeoms.forEach(g => {
+                g.r += g.v * timeScale;
+                if(activeAbilities.disco > 0) {
+                    g.y += Math.sin(discoTimerOffset * 0.05 + g.x) * 2;
+                } else {
+                    g.y += Math.sin(g.r) * 0.5;
+                }
+            });
+
+            for (let i = balls.length - 1; i >= 0; i--) {
+                const ball = balls[i];
+                if (!ball.update()) balls.splice(i, 1);
+                else {
+                    bricks.forEach((row, r) => row.forEach((b, c) => {
+                        if (b.status && ball.x > b.x && ball.x < b.x + 90 && ball.y > b.y && ball.y < b.y + 30) {
+                            if (activeAbilities.fire <= 0) ball.dy *= -1;
+                            hitBrick(r, c);
+                        }
+                    }));
+                }
+            }
+
+            if (balls.length === 0) {
+                lives--;
+                if (lives <= 0) end('OVER'); else respawn();
+            }
+
+            powerUps = powerUps.filter(p => p.update());
+            particles = particles.filter(p => p.update());
+            feedBacks = feedBacks.filter(f => f.update());
+
+            Object.keys(activeAbilities).forEach(k => {
+                if (activeAbilities[k] > 0) activeAbilities[k] -= 1;
+            });
+
+            if (bricks.every(r => r.every(b => !b.status))) end('WIN');
+            
+            scoreEl.innerText = score.toLocaleString();
+            livesEl.innerText = lives;
+            
+            ['fire', 'laser', 'slow', 'disco'].forEach(k => {
+                const el = document.getElementById('slot-' + k);
+                const overlay = el.querySelector('.timer-overlay');
+                if (activeAbilities[k] > 0) {
+                    el.classList.add('active');
+                    overlay.style.height = (activeAbilities[k] / MAX_TIMERS[k] * 100) + '%';
+                } else {
+                    el.classList.remove('active');
+                    overlay.style.height = '0%';
+                }
+            });
+        }
+
+        function draw() {
+            if (activeAbilities.disco > 0) {
+                ctx.fillStyle = `hsla(${discoHue}, 50%, 10%, 1)`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = `hsla(${(discoHue + 180)%360}, 100%, 50%, 0.15)`;
+                ctx.lineWidth = 1;
+                for(let i=0; i<canvas.width; i+=50) {
+                    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+                }
+                for(let i=0; i<canvas.height; i+=50) {
+                    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
+                }
+            } else {
+                ctx.fillStyle = '#020205';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            ctx.save();
+            if (shake > 0 && activeAbilities.disco <= 0) {
+                ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+                shake *= 0.9;
+            }
+
+            backgroundGeoms.forEach(g => {
+                ctx.save();
+                ctx.translate(g.x, g.y);
+                ctx.rotate(g.r);
+                if (activeAbilities.disco > 0) {
+                    ctx.fillStyle = `hsla(${(discoHue + g.x)%360}, 80%, 50%, 0.15)`;
+                    ctx.strokeStyle = `hsla(${(discoHue + g.x)%360}, 100%, 60%, 0.4)`;
+                    ctx.lineWidth = 3;
+                    if(g.type === 'square') {
+                        ctx.fillRect(-g.s/2, -g.s/2, g.s, g.s);
+                        ctx.strokeRect(-g.s/2, -g.s/2, g.s, g.s);
+                    } else {
+                        ctx.beginPath(); ctx.arc(0, 0, g.s/2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                    }
+                } else {
+                    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+                    ctx.lineWidth = 1;
+                    if(g.type === 'square') ctx.strokeRect(-g.s/2, -g.s/2, g.s, g.s);
+                    else { ctx.beginPath(); ctx.arc(0, 0, g.s/2, 0, Math.PI*2); ctx.stroke(); }
+                }
+                ctx.restore();
+            });
+
+            bricks.forEach(row => row.forEach(b => {
+                if (!b.status) return;
+                const isDisco = activeAbilities.disco > 0;
+                const color = isDisco ? `hsl(${(discoHue + b.x/4)%360}, 90%, 65%)` : b.color;
+                
+                ctx.shadowBlur = isDisco ? 25 : 10;
+                ctx.shadowColor = color;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.roundRect(b.x, b.y, 85, 25, 4);
+                ctx.fill();
+                
+                if (b.hp > 1) {
+                    ctx.strokeStyle = "rgba(255,255,255,0.6)";
+                    ctx.lineWidth = b.hp;
+                    ctx.stroke();
+                }
+            }));
+            ctx.shadowBlur = 0;
+
+            const pWidth = activeAbilities.mega > 0 ? config.paddleWidth * 2 : config.paddleWidth;
+            const isDisco = activeAbilities.disco > 0;
+            const pColor = isDisco ? `hsl(${discoHue}, 100%, 50%)` : config.colors.p;
+            
+            paddleHistory.forEach((h, i) => {
+                ctx.globalAlpha = (i / paddleHistory.length) * 0.4;
+                ctx.fillStyle = isDisco ? `hsl(${(discoHue + i*30)%360}, 100%, 50%)` : config.colors.s;
+                ctx.beginPath();
+                ctx.roundRect(h.x, canvas.height - 45, h.w, config.paddleHeight, 6);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+
+            ctx.save();
+            ctx.shadowBlur = isDisco ? 40 : 25;
+            ctx.shadowColor = pColor;
+            ctx.beginPath();
+            ctx.roundRect(paddleX, canvas.height - 45, pWidth, config.paddleHeight, 6);
+            ctx.clip();
+            
+            ctx.fillStyle = pColor;
+            ctx.fillRect(paddleX, canvas.height - 45, pWidth, config.paddleHeight);
+            
+            if(isDisco) {
+                ctx.fillStyle = `hsl(${(discoHue + 180)%360}, 100%, 50%)`;
+                for(let i=0; i<10; i++) {
+                    let ox = (i * 35 + (discoTimerOffset * 4)) % (pWidth + 70);
+                    ctx.fillRect(paddleX + ox - 35, canvas.height - 45, 15, config.paddleHeight);
+                }
+            }
+            ctx.restore();
+            ctx.shadowBlur = 0;
+
+            balls.forEach(b => b.draw());
+            powerUps.forEach(p => p.draw());
+            particles.forEach(p => p.draw());
+            feedBacks.forEach(f => f.draw());
+
+            ctx.restore();
+            requestAnimationFrame(() => { update(); draw(); });
+        }
+
+        function respawn() {
+            balls = [new Ball(canvas.width / 2, canvas.height - 120, 6, -6)];
+            activeAbilities = { fire: 0, laser: 0, slow: 0, mega: 0, disco: 0 };
+            comboCount = 0;
+        }
+
+        function startGame() {
+            score = 0; lives = 3; level = 1; xp = 0;
+            initBricks(); initBackground(); respawn();
+            gameState = 'PLAYING';
+            messageScreen.classList.add('hidden');
+        }
+
+        function end(type) {
+            gameState = type;
+            messageScreen.classList.remove('hidden');
+            document.getElementById('title').innerText = type === 'WIN' ? "YOU WON!" : "GAME OVER";
+            document.getElementById('title').style.color = type === 'WIN' ? config.colors.p : config.colors.a;
+            document.getElementById('final-score').innerText = `SCORE: ${score.toLocaleString()}`;
+            document.getElementById('final-score').classList.remove('hidden');
+            startBtn.innerText = "RETRY";
+        }
+
+        startBtn.addEventListener('click', startGame);
+
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+                if (w < 2 * r) r = w / 2;
+                if (h < 2 * r) r = h / 2;
+                this.moveTo(x + r, y);
+                this.arcTo(x + w, y, x + w, y + h, r);
+                this.arcTo(x + w, y + h, x, y + h, r);
+                this.arcTo(x, y + h, x, y, r);
+                this.arcTo(x, y, x + w, y, r);
+                this.closePath();
+                return this;
+            }
+        }
+
+        draw();
+    </script>
+</body>
+</html>
